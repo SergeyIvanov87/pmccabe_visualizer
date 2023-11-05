@@ -5,6 +5,7 @@ import os
 import subprocess
 import xml.etree.cElementTree as ET
 
+from collections import defaultdict
 from xml.etree.ElementTree import ElementTree
 from xml.etree.ElementTree import Element, SubElement, Comment, tostring
 
@@ -18,16 +19,14 @@ def extract_package_name(package):
 
 def build_child_pmccabe_attrite(pmccabe_attr):
     packages = pmccabe_attr[5].split(os.sep)
-    package_name = packages[0]
     child_package_name = extract_package_name(packages[1])
 
-    child_packages = str(os.sep).join(packages[1:])
-
+    # build new attributes cutting out the element by index 0 in packages list
     mod_pmccabe_attrs = pmccabe_attr.copy()
-    mod_pmccabe_attrs[5] = child_packages
+    mod_pmccabe_attrs[5] = str(os.sep).join(packages[1:])
 
-    next_package_id = NODE_IDS[0] if len(packages) > 2 else NODE_IDS[1]
-    return mod_pmccabe_attrs, child_package_name, next_package_id
+    child_package_type = NODE_IDS[0] if len(packages) > 2 else NODE_IDS[1]
+    return mod_pmccabe_attrs, child_package_name, child_package_type
 
 
 def build_leaf_pmccabe_attrite(pmccabe_attr):
@@ -37,8 +36,8 @@ def build_leaf_pmccabe_attrite(pmccabe_attr):
 
     return pmccabe_attr, file_name, function_name, NODE_IDS[2]
 
-
 class basic_node:
+    '''Class just owns the common node members and provide the minimal initialization support'''
     def __init__(self):
         self.type_id = -1
         self.node_id = -1
@@ -48,7 +47,7 @@ class basic_node:
         if self.type_id == -1:
             self.type_id = type_id
         if self.node_id == -1:
-            node_id += 1  # obtain next vacant id, if our node id is empty
+            node_id += 1  # obtain next vacant id, if our node is not initialized yet
             self.node_id = node_id
         if self.package_name is None:
             self.package_name = package
@@ -60,21 +59,30 @@ class basic_node:
         entry.set(NODE_NAMES[self.type_id], self.package_name)
         return entry
 
-
 class package_node(basic_node):
+    """
+    Class represents an intermediate node 'package', which holds a subsequent nodes
+    and stores information about all descendant leaf nodes as well as all its attributes,
+    like mmcc, tmcc, sif. Having stored it in that way, allows us to add up feeds
+    for analytics claculation: like a mean, median and distribution as a property of
+    this particular `package` for further processing through.
+    Also, it makes node folding more easily
+
+    Must contains other 'package' nodes and 'file' nodes only
+    """
     def __init__(self):
         super().__init__()
 
-        self.params = dict()
-        self.nested_packages = dict()
+        self.params = defaultdict(tuple)
+        self.nested_packages = {}
 
     def fill_child_data(self, child_node_id, inserted_leaf_node_id, pmccabe_attrs):
         (mmcc, tmcc, sif, _, _, item_file_path, _) = pmccabe_attrs
 
         package_name = item_file_path.split(os.sep)[0]
         last_node_id = super().fill(NODE_IDS[0], child_node_id, package_name)
-        if inserted_leaf_node_id not in self.params.keys():
-            self.params[inserted_leaf_node_id] = ()
+
+        # inserted_leaf_node_id is unique
         self.params[inserted_leaf_node_id] = (mmcc, tmcc, sif)
 
         return last_node_id
@@ -106,15 +114,18 @@ class package_node(basic_node):
         array = ET.SubElement(entry, "params")
         for child_id, items in self.params.items():
             elem = ET.SubElement(array, "elem", id=str(child_id), params=str(items))
-        #            ET.SubElement(array, "id").text = str(child_id)
-        #           ET.SubElement(array, "val").text = str(mmcc)
 
-        for id, elem in self.nested_packages.values():
+        for _, elem in self.nested_packages.values():
             elem.dump_xml(entry)
         return entry
 
-
 class file_node(package_node):
+    """
+    Class represents an aggregation node (file) for functions (entities).
+    It repeat after 'package' mostly, but cares more about file and child function extraction
+
+    Must contains 'item' nodes only
+    """
     def __init__(self):
         super().__init__()
         self.full_path = ""
@@ -157,8 +168,10 @@ class file_node(package_node):
         ET.SubElement(entry, "path").text = str(self.full_path)
         return entry
 
-
 class item_node(basic_node):
+    """
+    Leaf node in the hierarchy representing a called function
+    """
     def __init__(self):
         super().__init__()
         self.mmcc = 0
@@ -202,10 +215,14 @@ def node_factory(type_id):
 
 
 class package_tree:
+    """
+    Holder of parsing hierarchy
+    """
     def __init__(self):
-        self.nested_packages = dict()
+        self.nested_packages = {}
         self.node_id_counter = 0
 
+    @staticmethod
     def test(row):
         return len(row.split()) != 0
 
@@ -238,13 +255,40 @@ class attr_xml:
     def __init__(self, p_tree):
         self.packaged_tree = p_tree
 
-    def colorize(self, mmcc, sif):
-        self.mmcc, self.sif = rules
-
+    def filter_out(self, mmcc_limit, sif_limit):
         xml = self.packaged_tree.get_xml()
-        search_attr = './/entry[@type="{}"]'.format(NODE_NAMES[2])
-        elems = xml.findall(search_attr)
 
+        leaf_to_remove = {}
+        for _, value in self.packaged_tree.nested_packages.values():
+            for leaf_id in value.params.keys():
+                leaft_search_attr_id = './/entry[@id="{}"]'.format(leaf_id)
+                leaf_node = xml.findall(leaft_search_attr_id)
+                if len(leaf_node) != 1:
+                    raise Exeption(f"Entry with id: {leaf_id} is not unique")
+                for xml_child in leaf_node[0]:
+                    if xml_child.tag == "mmcc":
+                        mmcc = int(xml_child.text)
+                        if not(mmcc >= mmcc_limit[0] and mmcc <= mmcc_limit[1]):
+                            leaf_to_remove[leaf_id] = leaf_node
+                    if xml_child.tag == "sif":
+                        sif = int(xml_child.text)
+                        if not(sif >= sif_limit[0] and sif <= sif_limit[1]):
+                            leaf_to_remove[leaf_id] = leaf_node
+
+        #remove nodes
+        root = xml.getroot()
+        for node_id, node in leaf_to_remove.items():
+            elem_id_search = './/elem[@id="{}"]..'.format(node_id)
+            parents_of_node_to_delete = xml.findall(elem_id_search)
+            for p in parents_of_node_to_delete:
+                node_to_delete = xml.find('.//elem[@id="{}"]'.format(node_id))
+                p.remove(node_to_delete)
+
+            parents_of_node_to_delete = xml.find('.//entry[@id="{}"]..'.format(node_id))
+            node_to_delete = xml.find('.//entry[@id="{}"]'.format(node_id))
+            parents_of_node_to_delete.remove(node_to_delete)
+
+        return xml
 
 class stack_collapse:
     def __init__(self, p_tree):
@@ -309,15 +353,17 @@ pmc_result = subprocess.run(
 )
 scores_list = pmc_result.stdout.decode("utf-8").split("\n")
 
+# build  hierarchy tree
 tree = package_tree()
 for row in scores_list:
     if package_tree.test(row):
         tree.parse(row)
 
-# rules = {"mmcc": 15, "sif": 50}
-# xml = attr_xml(tree)
-# xml.colorize(**rules)
+# filter out nodes
+rules = {"mmcc_limit": [4,15], "sif_limit": [2,50]}
+xml = attr_xml(tree)
+xml.filter_out(**rules)
+
+# collapse tree as flamegraph format required
 c = stack_collapse(tree)
 c.collapse(0, "collapsed")
-# xml_tree = tree.get_xml()
-# tree.dump_xml(xml_tree, "filename_3.xml")
