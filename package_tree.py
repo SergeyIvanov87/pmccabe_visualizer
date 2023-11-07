@@ -14,6 +14,14 @@ NODE_NAMES = ["package", "file", "item"]
 def extract_package_name(package):
     return package.split("(")[0]
 
+def check_integer_limit(val, min_max_limit):
+    passed = True
+    val = int(val)
+    if min_max_limit is not None:
+        passed = False if val < min_max_limit[0] else passed
+        #if mmcc[1] is not None:
+        passed = False if  (min_max_limit[1] is not None) and (val > min_max_limit[1]) else passed
+    return passed
 
 def build_child_pmccabe_attrite(pmccabe_attr):
     packages = pmccabe_attr[5].split(os.sep)
@@ -79,8 +87,10 @@ class package_node(basic_node):
         self.nested_packages = {}
 
     def fill_child_data(self, child_node_id, inserted_leaf_node_id, pmccabe_attrs):
-        (mmcc, tmcc, sif, _, _, item_file_path, _) = pmccabe_attrs
-
+        mmcc = pmccabe_attrs[0]
+        tmcc = pmccabe_attrs[1]
+        sif = pmccabe_attrs[2]
+        item_file_path = pmccabe_attrs[5]
         package_name = item_file_path.split(os.sep)[0]
         last_node_id = super().fill(NODE_IDS[0], child_node_id, package_name)
 
@@ -135,7 +145,9 @@ class file_node(package_node):
         self.full_path = ""
 
     def fill_child_data(self, child_node_id, pmccabe_attrs, filename):
-        (mmcc, tmcc, sif, _, _, _, _) = pmccabe_attrs
+        mmcc = pmccabe_attrs[0]
+        tmcc = pmccabe_attrs[1]
+        sif = pmccabe_attrs[2]
         last_node_id = super().fill(NODE_IDS[1], child_node_id, filename)
         if child_node_id not in self.params.keys():
             self.params[child_node_id] = ()
@@ -230,8 +242,19 @@ class package_tree:
         self.node_id_counter = 0
 
     @staticmethod
-    def test(row):
-        return len(row.split()) != 0
+    def test(row, mmcc=None, tmcc=None, sif=None, lif=None):
+        passed = False
+        pmccabe_attrs = row.split()
+        if len(pmccabe_attrs) > 3:
+            mmcc_v = pmccabe_attrs[0]
+            tmcc_v = pmccabe_attrs[1]
+            sif_v = pmccabe_attrs[2]
+            lif_v = pmccabe_attrs[4]
+            passed = check_integer_limit(mmcc_v, mmcc)
+            passed = passed and check_integer_limit(tmcc_v, tmcc)
+            passed = passed and check_integer_limit(sif_v, sif)
+            passed = passed and check_integer_limit(lif_v, lif)
+        return passed
 
     def parse(self, row):
         pmccabe_attrs = row.split()
