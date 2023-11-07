@@ -10,3 +10,7 @@ All you need is just supplement the main script `pmccabe_build.py` by files list
 ```
 clear && find <my-project-path> -regex ".*\.\(hpp\|cpp\|c\|h\)" | grep -v "build" | grep -v "thirdparty" | ./pmccabe_build.py | ./collapse.py | <FlameGraph-Repo>/flamegraph.pl > project.svg
 ```
+
+**Result**:
+
+![alt text](https://github.com/SergeyIvanov87/pmccabe_visualizer/blob/main/test.svg?raw=true)
