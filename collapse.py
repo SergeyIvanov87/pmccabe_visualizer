@@ -53,13 +53,23 @@ supported_attributes = ["mmcc", "tmcc", "sif", "lif"]
 
 parser = argparse.ArgumentParser(
     prog="Stack collapsing for PMCCabe package tree builder",
-    description="Consumes output of `pmccabe_build` utility and unfold the tree representation into plain stack by an leaf node attribute, thereby preparing it for crafting a FlameGraph"
+    description="Consumes output of `pmccabe_build` utility and unfold the tree representation into plain stack by an leaf node attribute, thereby preparing it for crafting a FlameGraph",
 )
-parser.add_argument("attribute", default="mmcc", help='Choose an attribute: {} - which will be used as a final metric in a collapsed stack for crafting a FlameGraph. Default: \"mmcc\"'.format(",".join(supported_attributes)))
+parser.add_argument(
+    "attribute",
+    default="mmcc",
+    help='Choose an attribute: {} - which will be used as a final metric in a collapsed stack for crafting a FlameGraph. Default: "mmcc"'.format(
+        ",".join(supported_attributes)
+    ),
+)
 args = parser.parse_args()
 
 if args.attribute not in supported_attributes:
-    raise Exception("Entered attribute value: \"{}\" is not supported. Available attributes are: {}".format(args.attribute, ",".join(supported_attributes)));
+    raise Exception(
+        'Entered attribute value: "{}" is not supported. Available attributes are: {}'.format(
+            args.attribute, ",".join(supported_attributes)
+        )
+    )
 pmccabe_tree_xml = sys.stdin.read()
 xml_root = ElementTree.fromstring(pmccabe_tree_xml)
 
