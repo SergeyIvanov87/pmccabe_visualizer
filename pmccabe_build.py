@@ -55,5 +55,6 @@ for row in scores_list:
     if package_tree.package_tree.test(row,**limits):
         tree.parse(row)
 
+tree.calculate_statistic()
 xml_tree = tree.get_xml()
 print(tree.tostring(xml_tree).decode("utf-8"), file=sys.stdout)
