@@ -96,12 +96,13 @@ class package_node(basic_node):
         mmcc = int(pmccabe_attrs[0])
         tmcc = int(pmccabe_attrs[1])
         sif = int(pmccabe_attrs[2])
+        lif = int(pmccabe_attrs[4])
         item_file_path = pmccabe_attrs[5]
         package_name = item_file_path.split(os.sep)[0]
         last_node_id = super().fill(NODE_IDS[0], child_node_id, package_name)
 
         # inserted_leaf_node_id is unique
-        self.params[inserted_leaf_node_id] = (mmcc, tmcc, sif)
+        self.params[inserted_leaf_node_id] = (mmcc, tmcc, sif, lif)
 
         return last_node_id
 
@@ -129,39 +130,46 @@ class package_node(basic_node):
 
     def calculate_statistic(self):
         N = len(self.params)
+        if N == 0:
+            return
 
-        mean = (0, 0, 0)
-        median_array=([],[],[])
-        for _, items in self.params.items():
+        any_param = list(self.params.values())[0]
+        param_len = len(any_param)
+        median_array = tuple([] for _ in range(param_len))
+        mean = tuple( 0 for _ in range(param_len))
+
+        for items in self.params.values():
             mean = tuple(map(add, mean, items))
-            for i in range(0, len(items)):
+            for i in range(0, param_len):
                 median_array[i].append(items[i])
 
         self.mean = tuple(int(m / N) for m in mean)
 
-        for i in range(0, len(items)):
-                median_array[i].sort()
+        for i in range(0, param_len):
+            median_array[i].sort()
+        # find median element
         if N % 2:
-            self.median = tuple(median_array[i][int(N / 2)] for i in range(0, len(items)))
+            self.median = tuple(median_array[i][int(N / 2)] for i in range(0, param_len))
         else:
-            self.median = tuple((median_array[i][int(N / 2) - 1] + median_array[i][int(N / 2)] ) / 2 for i in range(0, len(items)))
+            self.median = tuple(int((median_array[i][int(N / 2) - 1] + median_array[i][int(N / 2)] ) / 2) for i in range(0, param_len))
 
-        deviation = (0,0,0)
-        for _, items in self.params.items():
+        deviation = tuple( 0 for _ in range(param_len))
+        for items in self.params.values():
             mean_diff = tuple(map(sub, self.mean, items))
             mean_diff_squarer = [pow(m,2) for m in mean_diff]
             deviation = tuple(map(add, deviation, mean_diff_squarer))
-        self.deviation = tuple(sqrt(d / N) for d in deviation)
+        self.deviation = tuple(int(sqrt(d / N)) for d in deviation)
 
+        # repeat recursive
         for t, child in self.nested_packages.values():
             if t in NODE_IDS[0:2]:
                 child.calculate_statistic()
 
     def dump_statistic_xml(self, entry):
         stat = ET.SubElement(entry, "statistic")
-        elem = ET.SubElement(stat, "mean").text = str(self.mean)
-        elem = ET.SubElement(stat, "median").text = str(self.median)
-        elem = ET.SubElement(stat, "deviation").text = str(self.deviation)
+        ET.SubElement(stat, "mean").text = str(self.mean)
+        ET.SubElement(stat, "median").text = str(self.median)
+        ET.SubElement(stat, "deviation").text = str(self.deviation)
 
     def dump_xml(self, parent):
         entry = super().dump_xml(parent)
@@ -192,10 +200,11 @@ class file_node(package_node):
         mmcc = int(pmccabe_attrs[0])
         tmcc = int(pmccabe_attrs[1])
         sif = int(pmccabe_attrs[2])
+        lif = int(pmccabe_attrs[4])
         last_node_id = super().fill(NODE_IDS[1], child_node_id, filename)
         if child_node_id not in self.params.keys():
             self.params[child_node_id] = ()
-        self.params[child_node_id] = (mmcc, tmcc, sif)
+        self.params[child_node_id] = (mmcc, tmcc, sif, lif)
 
         return last_node_id
 
@@ -321,7 +330,7 @@ class package_tree:
 
     def get_xml(self):
         root = ET.Element("root")
-        for t, p in self.nested_packages.values():
+        for _, p in self.nested_packages.values():
             p.dump_xml(root)
         return ET.ElementTree(root)
 
