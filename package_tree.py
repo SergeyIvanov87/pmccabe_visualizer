@@ -17,14 +17,20 @@ NODE_NAMES = ["package", "file", "item"]
 def extract_package_name(package):
     return package.split("(")[0]
 
+
 def check_integer_limit(val, min_max_limit):
     passed = True
     val = int(val)
     if min_max_limit is not None:
         passed = False if val < min_max_limit[0] else passed
-        #if mmcc[1] is not None:
-        passed = False if  (min_max_limit[1] is not None) and (val > min_max_limit[1]) else passed
+        # if mmcc[1] is not None:
+        passed = (
+            False
+            if (min_max_limit[1] is not None) and (val > min_max_limit[1])
+            else passed
+        )
     return passed
+
 
 def build_child_pmccabe_attrite(pmccabe_attr):
     packages = pmccabe_attr[5].split(os.sep)
@@ -92,18 +98,19 @@ class package_node(basic_node):
         self.median = ()
         self.deviation = ()
 
-    def fill_child_data(self, child_node_id, inserted_leaf_node_id, pmccabe_attrs):
+    def set_params_for_node(self, node_name, pmccabe_attrs):
         mmcc = int(pmccabe_attrs[0])
         tmcc = int(pmccabe_attrs[1])
         sif = int(pmccabe_attrs[2])
         lif = int(pmccabe_attrs[4])
+        self.params[node_name] = (mmcc, tmcc, sif, lif)
+
+    def fill_child_data(self, child_node_id, inserted_leaf_node_id, pmccabe_attrs):
         item_file_path = pmccabe_attrs[5]
         package_name = item_file_path.split(os.sep)[0]
         last_node_id = super().fill(NODE_IDS[0], child_node_id, package_name)
 
-        # inserted_leaf_node_id is unique
-        self.params[inserted_leaf_node_id] = (mmcc, tmcc, sif, lif)
-
+        self.set_params_for_node(inserted_leaf_node_id, pmccabe_attrs)
         return last_node_id
 
     def parse_node(self, raw_data, full_path, next_node_id=0):
@@ -136,7 +143,7 @@ class package_node(basic_node):
         any_param = list(self.params.values())[0]
         param_len = len(any_param)
         median_array = tuple([] for _ in range(param_len))
-        mean = tuple( 0 for _ in range(param_len))
+        mean = tuple(0 for _ in range(param_len))
 
         for items in self.params.values():
             mean = tuple(map(add, mean, items))
@@ -149,14 +156,19 @@ class package_node(basic_node):
             median_array[i].sort()
         # find median element
         if N % 2:
-            self.median = tuple(median_array[i][int(N / 2)] for i in range(0, param_len))
+            self.median = tuple(
+                median_array[i][int(N / 2)] for i in range(0, param_len)
+            )
         else:
-            self.median = tuple(int((median_array[i][int(N / 2) - 1] + median_array[i][int(N / 2)] ) / 2) for i in range(0, param_len))
+            self.median = tuple(
+                int((median_array[i][int(N / 2) - 1] + median_array[i][int(N / 2)]) / 2)
+                for i in range(0, param_len)
+            )
 
-        deviation = tuple( 0 for _ in range(param_len))
+        deviation = tuple(0 for _ in range(param_len))
         for items in self.params.values():
             mean_diff = tuple(map(sub, self.mean, items))
-            mean_diff_squarer = [pow(m,2) for m in mean_diff]
+            mean_diff_squarer = [pow(m, 2) for m in mean_diff]
             deviation = tuple(map(add, deviation, mean_diff_squarer))
         self.deviation = tuple(int(sqrt(d / N)) for d in deviation)
 
@@ -196,16 +208,10 @@ class file_node(package_node):
         super().__init__()
         self.full_path = ""
 
-    def fill_child_data(self, child_node_id, pmccabe_attrs, filename):
-        mmcc = int(pmccabe_attrs[0])
-        tmcc = int(pmccabe_attrs[1])
-        sif = int(pmccabe_attrs[2])
-        lif = int(pmccabe_attrs[4])
+    def fill_child_data(self, child_node_id, filename, pmccabe_attrs):
         last_node_id = super().fill(NODE_IDS[1], child_node_id, filename)
-        if child_node_id not in self.params.keys():
-            self.params[child_node_id] = ()
-        self.params[child_node_id] = (mmcc, tmcc, sif, lif)
 
+        self.set_params_for_node(child_node_id, pmccabe_attrs)
         return last_node_id
 
     def parse_node(self, raw_data, full_path, next_node_id):
@@ -228,7 +234,7 @@ class file_node(package_node):
         )
 
         return (
-            self.fill_child_data(inserted_child_node_id, pmccabe_attrs, file_name),
+            self.fill_child_data(inserted_child_node_id, file_name, pmccabe_attrs),
             inserted_child_node_id,
         )
 
