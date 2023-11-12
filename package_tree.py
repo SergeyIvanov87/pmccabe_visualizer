@@ -1,4 +1,6 @@
 import os
+from operator import sub
+from operator import add
 
 import xml.etree.cElementTree as ET
 
@@ -6,6 +8,7 @@ from collections import defaultdict
 from xml.etree.ElementTree import ElementTree
 from xml.etree.ElementTree import Element, SubElement, Comment, tostring
 
+from math import sqrt
 
 NODE_IDS = [0, 1, 2]
 NODE_NAMES = ["package", "file", "item"]
@@ -14,14 +17,20 @@ NODE_NAMES = ["package", "file", "item"]
 def extract_package_name(package):
     return package.split("(")[0]
 
+
 def check_integer_limit(val, min_max_limit):
     passed = True
     val = int(val)
     if min_max_limit is not None:
         passed = False if val < min_max_limit[0] else passed
-        #if mmcc[1] is not None:
-        passed = False if  (min_max_limit[1] is not None) and (val > min_max_limit[1]) else passed
+        # if mmcc[1] is not None:
+        passed = (
+            False
+            if (min_max_limit[1] is not None) and (val > min_max_limit[1])
+            else passed
+        )
     return passed
+
 
 def build_child_pmccabe_attrite(pmccabe_attr):
     packages = pmccabe_attr[5].split(os.sep)
@@ -85,18 +94,23 @@ class package_node(basic_node):
 
         self.params = defaultdict(tuple)
         self.nested_packages = {}
+        self.mean = ()
+        self.median = ()
+        self.deviation = ()
+
+    def set_params_for_node(self, node_name, pmccabe_attrs):
+        mmcc = int(pmccabe_attrs[0])
+        tmcc = int(pmccabe_attrs[1])
+        sif = int(pmccabe_attrs[2])
+        lif = int(pmccabe_attrs[4])
+        self.params[node_name] = (mmcc, tmcc, sif, lif)
 
     def fill_child_data(self, child_node_id, inserted_leaf_node_id, pmccabe_attrs):
-        mmcc = pmccabe_attrs[0]
-        tmcc = pmccabe_attrs[1]
-        sif = pmccabe_attrs[2]
         item_file_path = pmccabe_attrs[5]
         package_name = item_file_path.split(os.sep)[0]
         last_node_id = super().fill(NODE_IDS[0], child_node_id, package_name)
 
-        # inserted_leaf_node_id is unique
-        self.params[inserted_leaf_node_id] = (mmcc, tmcc, sif)
-
+        self.set_params_for_node(inserted_leaf_node_id, pmccabe_attrs)
         return last_node_id
 
     def parse_node(self, raw_data, full_path, next_node_id=0):
@@ -121,11 +135,61 @@ class package_node(basic_node):
             inserted_leaf_node_id,
         )
 
+    def calculate_statistic(self):
+        N = len(self.params)
+        if N == 0:
+            return
+
+        any_param = list(self.params.values())[0]
+        param_len = len(any_param)
+        median_array = tuple([] for _ in range(param_len))
+        mean = tuple(0 for _ in range(param_len))
+
+        for items in self.params.values():
+            mean = tuple(map(add, mean, items))
+            for i in range(0, param_len):
+                median_array[i].append(items[i])
+
+        self.mean = tuple(int(m / N) for m in mean)
+
+        for i in range(0, param_len):
+            median_array[i].sort()
+        # find median element
+        if N % 2:
+            self.median = tuple(
+                median_array[i][int(N / 2)] for i in range(0, param_len)
+            )
+        else:
+            self.median = tuple(
+                int((median_array[i][int(N / 2) - 1] + median_array[i][int(N / 2)]) / 2)
+                for i in range(0, param_len)
+            )
+
+        deviation = tuple(0 for _ in range(param_len))
+        for items in self.params.values():
+            mean_diff = tuple(map(sub, self.mean, items))
+            mean_diff_squarer = [pow(m, 2) for m in mean_diff]
+            deviation = tuple(map(add, deviation, mean_diff_squarer))
+        self.deviation = tuple(int(sqrt(d / N)) for d in deviation)
+
+        # repeat recursive
+        for t, child in self.nested_packages.values():
+            if t in NODE_IDS[0:2]:
+                child.calculate_statistic()
+
+    def dump_statistic_xml(self, entry):
+        stat = ET.SubElement(entry, "statistic")
+        ET.SubElement(stat, "mean").text = str(self.mean)
+        ET.SubElement(stat, "median").text = str(self.median)
+        ET.SubElement(stat, "deviation").text = str(self.deviation)
+
     def dump_xml(self, parent):
         entry = super().dump_xml(parent)
         array = ET.SubElement(entry, "params")
         for child_id, items in self.params.items():
             elem = ET.SubElement(array, "elem", id=str(child_id), params=str(items))
+
+        self.dump_statistic_xml(entry)
 
         for _, elem in self.nested_packages.values():
             elem.dump_xml(entry)
@@ -144,15 +208,10 @@ class file_node(package_node):
         super().__init__()
         self.full_path = ""
 
-    def fill_child_data(self, child_node_id, pmccabe_attrs, filename):
-        mmcc = pmccabe_attrs[0]
-        tmcc = pmccabe_attrs[1]
-        sif = pmccabe_attrs[2]
+    def fill_child_data(self, child_node_id, filename, pmccabe_attrs):
         last_node_id = super().fill(NODE_IDS[1], child_node_id, filename)
-        if child_node_id not in self.params.keys():
-            self.params[child_node_id] = ()
-        self.params[child_node_id] = (mmcc, tmcc, sif)
 
+        self.set_params_for_node(child_node_id, pmccabe_attrs)
         return last_node_id
 
     def parse_node(self, raw_data, full_path, next_node_id):
@@ -175,7 +234,7 @@ class file_node(package_node):
         )
 
         return (
-            self.fill_child_data(inserted_child_node_id, pmccabe_attrs, file_name),
+            self.fill_child_data(inserted_child_node_id, file_name, pmccabe_attrs),
             inserted_child_node_id,
         )
 
@@ -271,9 +330,13 @@ class package_tree:
             row, pmccabe_attrs[5], self.node_id_counter
         )
 
+    def calculate_statistic(self):
+        for main_package in self.nested_packages.values():
+            main_package[1].calculate_statistic()
+
     def get_xml(self):
         root = ET.Element("root")
-        for t, p in self.nested_packages.values():
+        for _, p in self.nested_packages.values():
             p.dump_xml(root)
         return ET.ElementTree(root)
 
