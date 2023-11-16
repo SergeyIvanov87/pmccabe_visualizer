@@ -1,7 +1,7 @@
 import os
 from operator import sub
 from operator import add
-
+import sys
 import xml.etree.cElementTree as ET
 
 from collections import defaultdict
@@ -304,11 +304,15 @@ class package_tree:
     def test(row, mmcc=None, tmcc=None, sif=None, lif=None):
         passed = False
         pmccabe_attrs = row.split()
-        if len(pmccabe_attrs) > 3:
+        if len(pmccabe_attrs) > 5:
             mmcc_v = pmccabe_attrs[0]
             tmcc_v = pmccabe_attrs[1]
             sif_v = pmccabe_attrs[2]
             lif_v = pmccabe_attrs[4]
+            if len(pmccabe_attrs) < 7:
+                print(f"Unrecognized row format: {row}\n7 attributes expected at least", file=sys.stderr)
+                return False
+
             passed = check_integer_limit(mmcc_v, mmcc)
             passed = passed and check_integer_limit(tmcc_v, tmcc)
             passed = passed and check_integer_limit(sif_v, sif)
@@ -319,6 +323,12 @@ class package_tree:
         pmccabe_attrs = row.split()
         package_names = pmccabe_attrs[5].split(os.sep)
 
+        # empty node cause error in flamegraph generation and anyway makes no sense
+        # remove it
+        if package_names[0] == "":
+            package_names = package_names[1:]
+            pmccabe_attrs[5] = os.sep.join(package_names)
+            row = " ".join(pmccabe_attrs)
         main_package = package_names[0]
         if main_package not in self.nested_packages.keys():
             self.nested_packages[main_package] = (
