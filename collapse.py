@@ -56,13 +56,15 @@ parser = argparse.ArgumentParser(
     prog="Stack collapsing for PMCCabe package tree builder",
     description="Consumes output of `pmccabe_build` utility and unfold the tree representation into plain stack by an leaf node attribute, thereby preparing it for crafting a FlameGraph",
 )
+
 parser.add_argument(
-    "attributes",
+    "-attr", "--attributes",
     default="mmcc",
     help='Choose an attributes: {} - which will be used as a final metric in a collapsed stack for crafting a FlameGraph. Default: "mmcc"'.format(
         ",".join(supported_attributes)
     ),
 )
+
 args = parser.parse_args()
 
 input_attributes = args.attributes.split(',')
