@@ -4,6 +4,9 @@ import argparse
 import os
 import sys
 
+import common_help
+
+from argparse import RawTextHelpFormatter
 from collections import defaultdict
 from package_tree import package_tree
 from xml.etree.ElementTree import ElementTree
@@ -53,16 +56,17 @@ class stack_collapse:
 supported_attributes = ["mmcc", "tmcc", "sif", "lif"]
 
 parser = argparse.ArgumentParser(
+    formatter_class=RawTextHelpFormatter,
     prog="Stack collapsing for PMCCabe package tree builder",
-    description="Consumes output of `pmccabe_build` utility and unfold the tree representation into plain stack by an leaf node attribute, thereby preparing it for crafting a FlameGraph",
+    description="Consumes output of `pmccabe_build` utility and unfold the tree representation into plain stack by an leaf node attribute, thereby preparing it for crafting a FlameGraph.",
+    epilog=common_help.PMCCABE_PARAMS_DESCR
 )
 
 parser.add_argument(
     "-attr", "--attributes",
-    default="mmcc",
-    help='Choose an attributes: {} - which will be used as a final metric in a collapsed stack for crafting a FlameGraph. Default: "mmcc"'.format(
-        ",".join(supported_attributes)
-    ),
+    default=",".join(supported_attributes),
+    help="Choose attributes: \"{}\" - which will be used as a final metric in a collapsed stack for crafting a FlameGraph.\nDefault: \"{}\"".format(
+        "\",\"".join(supported_attributes), ",".join(supported_attributes))
 )
 
 args = parser.parse_args()
