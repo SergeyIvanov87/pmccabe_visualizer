@@ -261,15 +261,16 @@ class item_node(basic_node):
     def parse_node(self, raw_data, full_path, candidate_node_id):
         pmccabe_attrs = raw_data.split()
 
-        last_occupied_node_id = super().fill(
-            NODE_IDS[2], candidate_node_id, pmccabe_attrs[6]
-        )
         self.mmcc += int(pmccabe_attrs[0])
         self.tmcc += int(pmccabe_attrs[1])
         self.sif += int(pmccabe_attrs[2])
         self.flf += int(pmccabe_attrs[3])
         self.lif += int(pmccabe_attrs[4])
         self.full_path = full_path
+
+        last_occupied_node_id = super().fill(
+            NODE_IDS[2], candidate_node_id, pmccabe_attrs[6] + ":" + str(self.flf)
+        )
         return last_occupied_node_id
 
     def dump_xml(self, parent):
