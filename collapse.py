@@ -50,7 +50,7 @@ class stack_collapse:
                             + function_name
                             )
                     for attr_name in attribute_names:
-                        print(full_path + ";" + attr_name + "<<" + function_name + ">> " + attr_value[attr_name], file=outputfile)
+                        print(full_path + ";" + "<<" + attr_name.upper() + ">> " + attr_value[attr_name], file=outputfile)
 
 
 supported_attributes = ["mmcc", "tmcc", "sif", "lif"]
