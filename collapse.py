@@ -82,6 +82,9 @@ for input_attr in input_attributes:
 
 pmccabe_tree_xml = sys.stdin.read()
 xml_root = ElementTree.fromstring(pmccabe_tree_xml)
+if len(list(xml_root))==0:
+    sys.stdout.write("")
+    exit(0)
 
 processor = stack_collapse(xml_root)
 filtered_xml = processor.collapse(input_attributes, sys.stdout)
