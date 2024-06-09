@@ -81,6 +81,10 @@ for input_attr in input_attributes:
         )
 
 pmccabe_tree_xml = sys.stdin.read()
+if len(list(xml_root))==0:
+    sys.stdout.write("")
+    exit(0)
+
 xml_root = ElementTree.fromstring(pmccabe_tree_xml)
 if len(list(xml_root))==0:
     sys.stdout.write("")
