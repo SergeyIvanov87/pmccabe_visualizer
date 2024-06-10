@@ -81,7 +81,7 @@ for input_attr in input_attributes:
         )
 
 pmccabe_tree_xml = sys.stdin.read()
-if len(list(xml_root))==0:
+if len(pmccabe_tree_xml)==0:
     sys.stdout.write("")
     exit(0)
 
